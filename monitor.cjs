@@ -97,6 +97,46 @@ for (const [label, route, expected] of categories) {
   await inspect(label, ROOT + route, label === 'Pocket Packs' ? pocketActive : expected);
 }
 
+// Verify the public homepage's Shop Candy button reaches the All Products listing.
+async function checkShopCandyNavigation() {
+  const entry = { label: 'Homepage Shop Candy navigation', url: ROOT + '/', checkedAt: new Date().toISOString(), status: 'inconclusive' };
+  try {
+    const response = await page.goto(ROOT + '/', { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForTimeout(3500);
+    const candidates = page.getByRole('link', { name: /shop candy/i });
+    const count = await candidates.count();
+    entry.matchCount = count;
+    if (response?.status() >= 400) {
+      entry.status = 'failure';
+      entry.reason = 'Homepage returned HTTP ' + response.status();
+    } else if (count === 0) {
+      entry.status = 'inconclusive';
+      entry.reason = 'No Shop Candy link found; may use a non-link element or alternate label';
+    } else {
+      const link = candidates.first();
+      entry.linkHref = await link.getAttribute('href');
+      await Promise.all([
+        page.waitForLoadState('domcontentloaded', { timeout: 30000 }).catch(() => {}),
+        link.click({ timeout: 15000 }),
+      ]);
+      await page.waitForTimeout(4000);
+      entry.destination = page.url();
+      const expected = new URL(ROOT + '/shop/ols/all').pathname.replace(/\\/$/, '');
+      const actual = new URL(entry.destination).pathname.replace(/\\/$/, '');
+      entry.status = actual === expected && new URL(entry.destination).origin === ROOT ? 'verified' : 'failure';
+      entry.reason = entry.status === 'verified' ? 'Shop Candy navigates to All Products' : 'Shop Candy destination differs from All Products';
+      await page.screenshot({ path: path.join(out, 'homepage-shop-candy-navigation.png'), fullPage: true });
+    }
+  } catch (err) {
+    entry.status = 'inconclusive';
+    entry.error = String(err.message || err);
+  }
+  results.push(entry);
+  console.log(entry.label + ': ' + entry.status + ' (' + (entry.destination || entry.reason || entry.error || '') + ')');
+}
+
+await checkShopCandyNavigation();
+
 // All Products: use the verified direct GoDaddy listing URL.
 await inspect('All Products', ROOT + '/shop/ols/all', true);
 
