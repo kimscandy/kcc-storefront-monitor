@@ -2,6 +2,10 @@ name: Manual storefront browser check
 
 on:
   workflow_dispatch:
+  schedule:
+    # GitHub cron uses UTC. Two candidate hours cover EST and EDT.
+    - cron: '0 12 * * *'
+    - cron: '0 13 * * *'
 
 permissions:
   contents: read
@@ -13,19 +17,42 @@ jobs:
       image: mcr.microsoft.com/playwright:v1.56.1-noble
     timeout-minutes: 12
     steps:
+      - name: Select the 8 AM Eastern schedule
+        id: schedule_gate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          SCHEDULE_CRON: ${{ github.event.schedule }}
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          let run = process.env.EVENT_NAME !== 'schedule';
+          if (!run) {
+            const utcHour = Number(process.env.SCHEDULE_CRON.split(' ')[1]);
+            const now = new Date();
+            const scheduled = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), utcHour));
+            const easternHour = Number(new Intl.DateTimeFormat('en-US', {timeZone:'America/New_York', hour:'numeric', hourCycle:'h23'}).format(scheduled));
+            run = easternHour === 8;
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'run_check=' + run + '\\n');
+          console.log(run ? 'Run storefront check' : 'Skip alternate UTC hour (not 8 AM Eastern)');
+          NODE
+
       - name: Check out monitoring repository
+        if: steps.schedule_gate.outputs.run_check == 'true'
         uses: actions/checkout@v4
 
       - name: Install matching Playwright package
+        if: steps.schedule_gate.outputs.run_check == 'true'
         run: npm install --no-save playwright@1.56.1
 
       - name: Run storefront browser check
+        if: steps.schedule_gate.outputs.run_check == 'true'
         id: check
         continue-on-error: true
         run: node monitor.cjs
 
       - name: Upload screenshots and observations
-        if: always()
+        if: steps.schedule_gate.outputs.run_check == 'true' && always()
         uses: actions/upload-artifact@v4
         with:
           name: storefront-check-evidence
@@ -34,13 +61,14 @@ jobs:
           retention-days: 7
 
       - name: Email completion report via Brevo
-        if: always()
+        if: steps.schedule_gate.outputs.run_check == 'true' && always()
         env:
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
         run: node send-report.cjs
 
       - name: Report script failures
-        if: steps.check.outcome == 'failure'
+        if: steps.schedule_gate.outputs.run_check == 'true'
+        if: steps.schedule_gate.outputs.run_check == 'true' && steps.check.outcome == 'failure'
         run: |
           echo "Browser check encountered a failure; review the evidence artifact."
           exit 1
