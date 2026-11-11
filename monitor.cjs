@@ -17,6 +17,24 @@ const results = [];
 async function main() {
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+const detailPage = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+
+async function verifyProductDetail(href) {
+  try {
+    const response = await detailPage.goto(new URL(href, ROOT).href, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await detailPage.waitForTimeout(3500);
+    const detail = await detailPage.evaluate(() => {
+      const text = document.body?.innerText || '';
+      const controls = [...document.querySelectorAll('button, input[type="submit"], [role="button"], a')]
+        .filter(el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; })
+        .map(el => (el.innerText || el.getAttribute('aria-label') || el.value || '').trim())
+        .filter(t => /add to cart|buy now|add to bag|select options|add to basket/i.test(t)).slice(0, 10);
+      return { hasPrice: /\\$\\s*\\d+(?:\\.\\d{2})?/.test(text), controls, excerpt: text.slice(0, 500) };
+    });
+    return { url: detailPage.url(), httpStatus: response?.status(), ...detail, purchasable: (response?.status() || 0) < 400 && detail.hasPrice && detail.controls.length > 0 };
+  } catch (err) { return { error: String(err.message || err), purchasable: false }; }
+}
+
 
 async function inspect(label, url, expectProducts) {
   const entry = { label, url, checkedAt: new Date().toISOString(), status: 'inconclusive' };
@@ -54,9 +72,12 @@ async function inspect(label, url, expectProducts) {
       };
     });
     const o = entry.observation;
+    if (expectProducts && o.productLinks.length && o.visiblePrices.length) {
+      entry.productDetailCheck = await verifyProductDetail(o.productLinks[0].href);
+    }
     if (entry.httpStatus >= 400 || o.comingSoon) {
       entry.status = expectProducts ? 'failure' : 'expected-empty-or-unavailable';
-    } else if (o.productLinks.length && o.visiblePrices.length && o.purchaseControls.length) {
+    } else if (o.productLinks.length && o.visiblePrices.length && (o.purchaseControls.length || entry.productDetailCheck?.purchasable)) {
       entry.status = 'verified';
     } else if (!expectProducts && !o.productLinks.length) {
       entry.status = 'expected-empty';
