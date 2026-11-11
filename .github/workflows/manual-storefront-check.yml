@@ -33,7 +33,7 @@ jobs:
             const easternHour = Number(new Intl.DateTimeFormat('en-US', {timeZone:'America/New_York', hour:'numeric', hourCycle:'h23'}).format(scheduled));
             run = easternHour === 8;
           }
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'run_check=' + run + '\\n');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'run_check=' + run + '\n');
           console.log(run ? 'Run storefront check' : 'Skip alternate UTC hour (not 8 AM Eastern)');
           NODE
 
@@ -67,7 +67,6 @@ jobs:
         run: node send-report.cjs
 
       - name: Report script failures
-        if: steps.schedule_gate.outputs.run_check == 'true'
         if: steps.schedule_gate.outputs.run_check == 'true' && steps.check.outcome == 'failure'
         run: |
           echo "Browser check encountered a failure; review the evidence artifact."
