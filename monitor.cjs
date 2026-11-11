@@ -14,6 +14,7 @@ const out = path.join(process.cwd(), 'monitor-results');
 fs.mkdirSync(out, { recursive: true });
 const timestamp = new Date().toISOString();
 const results = [];
+async function main() {
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 
@@ -93,3 +94,6 @@ await browser.close();
 fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ timestamp, results }, null, 2));
 console.log('\nDiagnostics saved in monitor-results/results.json');
 if (results.some(r => r.status === 'failure')) process.exitCode = 1;
+
+}
+main().catch(err => { console.error(err); process.exitCode = 1; });
