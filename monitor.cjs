@@ -29,7 +29,7 @@ async function verifyProductDetail(href) {
         .filter(el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; })
         .map(el => (el.innerText || el.getAttribute('aria-label') || el.value || '').trim())
         .filter(t => /add to cart|buy now|add to bag|select options|add to basket/i.test(t)).slice(0, 10);
-      return { hasPrice: /\\$\\s*\\d+(?:\\.\\d{2})?/.test(text), controls, excerpt: text.slice(0, 500) };
+      return { hasPrice: /\$\s*\d+(?:\.\d{2})?/.test(text), controls, excerpt: text.slice(0, 500) };
     });
     return { url: detailPage.url(), httpStatus: response?.status(), ...detail, purchasable: (response?.status() || 0) < 400 && detail.hasPrice && detail.controls.length > 0 };
   } catch (err) { return { error: String(err.message || err), purchasable: false }; }
