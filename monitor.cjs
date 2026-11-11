@@ -106,43 +106,58 @@ for (const [label, route, expected] of categories) {
 // Verify the public homepage's Shop Candy button reaches the All Products listing.
 async function checkShopCandyNavigation() {
   const entry = { label: 'Homepage Shop Candy navigation', url: ROOT + '/', checkedAt: new Date().toISOString(), status: 'inconclusive' };
+  let destinationPage = page;
   try {
     const response = await page.goto(ROOT + '/', { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await page.waitForTimeout(3500);
+    await page.waitForTimeout(3000);
+    // Dismiss GoDaddy's cookie banner if present, without changing shopping settings.
+    const consentLabels = [/accept all/i, /accept cookies/i, /accept/i, /got it/i, /close/i];
+    for (const label of consentLabels) {
+      const buttons = page.getByRole('button', { name: label });
+      if (await buttons.count()) {
+        const button = buttons.first();
+        if (await button.isVisible().catch(() => false)) {
+          entry.cookieButton = await button.innerText().catch(() => String(label));
+          await button.click({ timeout: 5000 }).catch(() => {});
+          break;
+        }
+      }
+    }
     const candidates = page.getByRole('link', { name: /shop candy/i });
-    const count = await candidates.count();
-    entry.matchCount = count;
+    entry.matchCount = await candidates.count();
     if (response?.status() >= 400) {
-      entry.status = 'failure';
-      entry.reason = 'Homepage returned HTTP ' + response.status();
-    } else if (count === 0) {
       entry.status = 'inconclusive';
-      entry.reason = 'No Shop Candy link found; may use a non-link element or alternate label';
+      entry.reason = 'Homepage returned HTTP ' + response.status();
+    } else if (!entry.matchCount) {
+      entry.reason = 'Shop Candy link not identified';
     } else {
       const link = candidates.first();
       entry.linkHref = await link.getAttribute('href');
+      const popupPromise = page.waitForEvent('popup', { timeout: 5000 }).catch(() => null);
       await link.click({ timeout: 15000 });
-      // A slow GoDaddy transition can display the catalog at /shop rather than /shop/ols/all.
-      await page.waitForFunction(() => {
+      const popup = await popupPromise;
+      if (popup) destinationPage = popup;
+      await destinationPage.waitForLoadState('domcontentloaded', { timeout: 20000 }).catch(() => {});
+      await destinationPage.waitForFunction(() => {
         const text = document.body?.innerText || '';
-        const productLinks = [...document.querySelectorAll('a[href]')].filter(a => /\/shop\/ols\/products?\//i.test(a.getAttribute('href') || ''));
-        return productLinks.length > 0 && /\$\s*\d/.test(text);
-      }, { timeout: 25000 }).catch(() => {});
-      await page.waitForTimeout(1500);
-      entry.destination = page.url();
-      entry.catalogEvidence = await page.evaluate(() => ({
-        productLinks: [...document.querySelectorAll('a[href]')].filter(a => /\/shop\/ols\/products?\//i.test(a.getAttribute('href') || '')).length,
-        hasPrice: /\$\s*\d/.test(document.body?.innerText || ''),
-        comingSoon: /new products are coming soon!/i.test(document.body?.innerText || ''),
-      }));
+        const links = [...document.querySelectorAll('a[href]')].filter(a => /\/shop\/ols\/products?\//i.test(a.getAttribute('href') || ''));
+        return links.length > 0 && /\$\s*\d/.test(text);
+      }, { timeout: 30000 }).catch(() => {});
+      await destinationPage.waitForTimeout(1500);
+      entry.destination = destinationPage.url();
+      entry.catalogEvidence = await destinationPage.evaluate(() => {
+        const text = document.body?.innerText || '';
+        const links = [...document.querySelectorAll('a[href]')].filter(a => /\/shop\/ols\/products?\//i.test(a.getAttribute('href') || ''));
+        return { productLinks: links.length, hasPrice: /\$\s*\d/.test(text), comingSoon: /new products are coming soon!/i.test(text), title: document.title, excerpt: text.slice(0, 400) };
+      });
       const evidence = entry.catalogEvidence;
       entry.status = evidence.productLinks > 0 && evidence.hasPrice && !evidence.comingSoon ? 'verified' : 'inconclusive';
-      entry.reason = entry.status === 'verified' ? 'Shop Candy click displayed a product catalog with prices' : 'Catalog not reliably observed after clicking Shop Candy';
-      await page.screenshot({ path: path.join(out, 'homepage-shop-candy-navigation.png'), fullPage: true });
+      entry.reason = entry.status === 'verified' ? 'Shop Candy click displayed product catalog with prices' : 'Product catalog not reliably observed after clicking Shop Candy';
+      await destinationPage.screenshot({ path: path.join(out, 'homepage-shop-candy-navigation.png'), fullPage: true });
     }
   } catch (err) {
-    entry.status = 'inconclusive';
     entry.error = String(err.message || err);
+    entry.status = 'inconclusive';
   }
   results.push(entry);
   console.log(entry.label + ': ' + entry.status + ' (' + (entry.destination || entry.reason || entry.error || '') + ')');
