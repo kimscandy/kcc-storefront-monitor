@@ -121,8 +121,8 @@ async function checkShopCandyNavigation() {
       ]);
       await page.waitForTimeout(4000);
       entry.destination = page.url();
-      const expected = new URL(ROOT + '/shop/ols/all').pathname.replace(/\\/$/, '');
-      const actual = new URL(entry.destination).pathname.replace(/\\/$/, '');
+      const expected = new URL(ROOT + '/shop/ols/all').pathname.replace(/\/$/, '');
+      const actual = new URL(entry.destination).pathname.replace(/\/$/, '');
       entry.status = actual === expected && new URL(entry.destination).origin === ROOT ? 'verified' : 'failure';
       entry.reason = entry.status === 'verified' ? 'Shop Candy navigates to All Products' : 'Shop Candy destination differs from All Products';
       await page.screenshot({ path: path.join(out, 'homepage-shop-candy-navigation.png'), fullPage: true });
