@@ -97,19 +97,8 @@ for (const [label, route, expected] of categories) {
   await inspect(label, ROOT + route, label === 'Pocket Packs' ? pocketActive : expected);
 }
 
-// All Products: follow a real navigation link rather than assuming a URL.
-try {
-  await page.goto(ROOT + '/shop', { waitUntil: 'domcontentloaded', timeout: 45000 });
-  await page.waitForTimeout(3000);
-  const allHref = await page.evaluate(() => {
-    const a = [...document.querySelectorAll('a[href]')].find(a => /all products/i.test((a.innerText || '').trim()));
-    return a?.href || null;
-  });
-  if (allHref) await inspect('All Products', allHref, true);
-  else results.push({ label: 'All Products', status: 'inconclusive', reason: 'Could not discover All Products link from storefront navigation' });
-} catch (err) {
-  results.push({ label: 'All Products', status: 'inconclusive', error: String(err.message || err) });
-}
+// All Products: use the verified direct GoDaddy listing URL.
+await inspect('All Products', ROOT + '/shop/ols/all', true);
 
 await browser.close();
 fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ timestamp, results }, null, 2));
