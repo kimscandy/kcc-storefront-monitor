@@ -33,6 +33,12 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+      - name: Email completion report via Brevo
+        if: always()
+        env:
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+        run: node send-report.cjs
+
       - name: Report script failures
         if: steps.check.outcome == 'failure'
         run: |
